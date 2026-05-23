@@ -198,8 +198,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
   <div class="modal">
     <div class="modal-header">
       <button class="modal-close" onclick="closeModal()">✕</button>
-      <span>New Event</span>
+      <span id="modal-title">New Event</span>
       <button class="modal-save" id="save-btn" onclick="saveEvent()">SAVE</button>
+    </div>
+    <div id="delete-bar" style="display:none;padding:8px 16px;background:#fff5f5;border-bottom:1px solid #ffe0e0;text-align:right">
+      <button onclick="deleteEvent()" style="background:none;border:none;color:#e53935;font-size:13px;cursor:pointer;font-weight:600">🗑 Delete event</button>
     </div>
     <div class="modal-section"><input type="text" class="fi" id="ev-title" placeholder="Event title" style="font-size:16px;padding:5px 0"/></div>
     <div class="modal-section"><div class="modal-row"><span class="icon">📍</span><input type="text" class="fi" id="ev-loc" placeholder="Location"/></div></div>
@@ -326,6 +329,17 @@ async function loadEvents(){
   buildAgenda(true);buildMonth();
 }
 
+async function updateGCalEvent(ev){
+  const body={summary:ev.title,location:ev.loc||undefined,description:ev.notes||undefined};
+  if(ev.allDay){body.start={date:ev.date};body.end={date:ev.date};}
+  else{
+    body.start={dateTime:`${ev.date}T${ev.startTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
+    body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
+  }
+  body.extendedProperties={private:{familyWho:JSON.stringify(ev.who)}};
+  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.id}`,'PUT',body);
+}
+
 async function createGCalEvent(ev){
   const body={summary:ev.title,location:ev.loc||undefined,description:ev.notes||undefined};
   if(ev.allDay){body.start={date:ev.date};body.end={date:ev.date};}
@@ -379,7 +393,10 @@ function buildAgenda(scrollToToday){
     if(!evs.length){ec.innerHTML='<div class="no-ev">No events</div>'}
     else evs.forEach(ev=>{
       const timeStr=ev.allDay?'All day':`${fmtTime(ev.startTime)}–${fmtTime(ev.endTime)}`;
-      ec.innerHTML+=`<div class="ev"><div class="ev-time">${timeStr}</div><div class="ev-title${past?' past-title':''}">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div></div>`;
+      const evDiv=document.createElement('div');evDiv.className='ev';
+      evDiv.innerHTML=`<div class="ev-time">${timeStr}</div><div class="ev-title${past?' past-title':''}">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div>`;
+      evDiv.onclick=()=>openModal(ev.date,ev.id);
+      ec.appendChild(evDiv);
     });
     row.appendChild(dc);row.appendChild(ec);list.appendChild(row);
   }
@@ -422,21 +439,50 @@ function showView(v,btn){
 }
 
 // ── EVENT MODAL ───────────────────────────────────────────
-function openModal(ds){
-  const d=ds||todayStr;
-  ['ev-title','ev-loc','ev-notes'].forEach(id=>document.getElementById(id).value='');
+let editingEventId=null;
+
+function openModal(ds,eventId=null){
+  editingEventId=eventId;
+  const isEdit=!!eventId;
+  const ev=isEdit?events.find(e=>e.id===eventId):null;
+  const d=ev?ev.date:(ds||todayStr);
+
+  document.getElementById('modal-title').textContent=isEdit?'Edit Event':'New Event';
+  document.getElementById('delete-bar').style.display=isEdit?'block':'none';
+
+  document.getElementById('ev-title').value=ev?ev.title:'';
+  document.getElementById('ev-loc').value=ev?ev.loc:'';
+  document.getElementById('ev-notes').value=ev?ev.notes:'';
+  document.getElementById('cc').textContent=(ev?ev.notes.length:0)+' / 8000';
   document.getElementById('ev-start-date').value=d;
   document.getElementById('ev-end-date').value=d;
-  document.getElementById('ev-start-time').value='12:00';
-  document.getElementById('ev-end-time').value='13:00';
-  document.getElementById('cc').textContent='0 / 8000';
-  document.getElementById('allday-toggle').classList.remove('on');
-  document.getElementById('time-fields').style.opacity='1';
-  document.querySelectorAll('.who-item input').forEach(c=>c.checked=true);
+  document.getElementById('ev-start-time').value=ev&&ev.startTime?ev.startTime:'12:00';
+  document.getElementById('ev-end-time').value=ev&&ev.endTime?ev.endTime:'13:00';
+
+  const allDay=ev?ev.allDay:false;
+  const tog=document.getElementById('allday-toggle');
+  allDay?tog.classList.add('on'):tog.classList.remove('on');
+  document.getElementById('time-fields').style.opacity=allDay?'0.3':'1';
+
+  const who=ev?ev.who:['angel','raluca','victor'];
+  ['angel','raluca','victor'].forEach(p=>document.getElementById('who-'+p).checked=who.includes(p));
   document.getElementById('ev-title').classList.remove('field-error');
   document.getElementById('modal').classList.add('open');
   setTimeout(()=>document.getElementById('ev-title').focus(),100);
 }
+
+// Sync end date when start date changes
+document.getElementById('ev-start-date').addEventListener('change',function(){
+  const endDate=document.getElementById('ev-end-date');
+  if(endDate.value<=this.value)endDate.value=this.value;
+});
+
+// Sync end time when start time changes (maintain 1h duration)
+document.getElementById('ev-start-time').addEventListener('change',function(){
+  const [h,m]=this.value.split(':').map(Number);
+  const endH=h+1>23?23:h+1;
+  document.getElementById('ev-end-time').value=`${String(endH).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+});
 
 async function saveEvent(){
   const title=document.getElementById('ev-title').value.trim();
@@ -448,6 +494,7 @@ async function saveEvent(){
   btn.textContent='...';btn.disabled=true;
 
   const ev={
+    id:editingEventId||null,
     date:document.getElementById('ev-start-date').value,
     startTime:allDay?null:document.getElementById('ev-start-time').value,
     endTime:allDay?null:document.getElementById('ev-end-time').value,
@@ -460,13 +507,29 @@ async function saveEvent(){
   };
 
   if(accessToken){
-    const created=await createGCalEvent(ev);
-    if(created){ev.id=created.id;ev.gcal=true;}
+    if(editingEventId){
+      await updateGCalEvent(ev);
+      events=events.map(e=>e.id===editingEventId?{...ev,gcal:true}:e);
+    } else {
+      const created=await createGCalEvent(ev);
+      if(created){ev.id=created.id;ev.gcal=true;}
+      events.push(ev);
+    }
+  } else {
+    if(editingEventId){events=events.map(e=>e.id===editingEventId?ev:e);}
+    else{ev.id='local-'+Date.now();events.push(ev);}
   }
-  events.push(ev);
-  closeModal();
-  buildAgenda(false);buildMonth();
+
+  closeModal();buildAgenda(false);buildMonth();
   btn.textContent='SAVE';btn.disabled=false;
+}
+
+async function deleteEvent(){
+  if(!editingEventId)return;
+  if(!confirm('Delete this event?'))return;
+  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${editingEventId}`,'DELETE');}
+  events=events.filter(e=>e.id!==editingEventId);
+  closeModal();buildAgenda(false);buildMonth();
 }
 
 function closeModal(){document.getElementById('modal').classList.remove('open')}
