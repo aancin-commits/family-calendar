@@ -375,11 +375,19 @@ async function loadAllEvents(){
 function parseCalendarItems(items,target){
   items.forEach(item=>{
     if(item.status==='cancelled')return;
-    const dateStr=item.start?.date||item.start?.dateTime?.split('T')[0];
-    if(!dateStr)return;
-    const startTime=item.start?.dateTime?item.start.dateTime.split('T')[1].slice(0,5):null;
-    const endTime=item.end?.dateTime?item.end.dateTime.split('T')[1].slice(0,5):null;
     const allDay=!!item.start?.date;
+    let dateStr,startTime=null,endTime=null;
+    if(allDay){
+      dateStr=item.start.date;
+    } else {
+      // Parse as local time to avoid UTC offset shifting date/time
+      const startDt=new Date(item.start.dateTime);
+      const endDt=new Date(item.end.dateTime);
+      dateStr=fmtDate(startDt);
+      startTime=`${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
+      endTime=`${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`;
+    }
+    if(!dateStr)return;
     let who=[];
     try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
     if(!who.length)who=['angel'];
@@ -506,20 +514,24 @@ let editingEventId=null;
 function openModal(ds,eventId=null){
   editingEventId=eventId;
   const isEdit=!!eventId;
-  const ev=isEdit?events.find(e=>e.id===eventId):null;
-  const d=ev?ev.date:(ds||todayStr);
+  const ev=isEdit?(events.find(e=>e.id===eventId)||allEvents.find(e=>e.id===eventId)):null;
+  const d=ev?ev.date:(ds||fmtDate(new Date()));
+
+  // Default time: next full hour
+  const now=new Date();
+  const nextHour=`${String(now.getHours()+1>23?23:now.getHours()+1).padStart(2,'0')}:00`;
+  const nextHourEnd=`${String(now.getHours()+2>23?23:now.getHours()+2).padStart(2,'0')}:00`;
 
   document.getElementById('modal-title').textContent=isEdit?'Edit Event':'New Event';
   document.getElementById('delete-bar').style.display=isEdit?'block':'none';
-
   document.getElementById('ev-title').value=ev?ev.title:'';
   document.getElementById('ev-loc').value=ev?ev.loc:'';
   document.getElementById('ev-notes').value=ev?ev.notes:'';
   document.getElementById('cc').textContent=(ev?ev.notes.length:0)+' / 8000';
   document.getElementById('ev-start-date').value=d;
   document.getElementById('ev-end-date').value=d;
-  document.getElementById('ev-start-time').value=ev&&ev.startTime?ev.startTime:'12:00';
-  document.getElementById('ev-end-time').value=ev&&ev.endTime?ev.endTime:'13:00';
+  document.getElementById('ev-start-time').value=ev&&ev.startTime?ev.startTime:nextHour;
+  document.getElementById('ev-end-time').value=ev&&ev.endTime?ev.endTime:nextHourEnd;
 
   const allDay=ev?ev.allDay:false;
   const tog=document.getElementById('allday-toggle');
@@ -724,6 +736,12 @@ function closeSearch(){
 }
 function doSearch(q){
   const list=document.getElementById('agenda-list');
+  // Make agenda tab active without triggering buildAgenda
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.getElementById('v-agenda').classList.add('active');
+  document.getElementById('tab-agenda').classList.add('active');
+
   list.innerHTML='';
   const term=q.trim().toLowerCase();
   if(!term){buildAgenda(false);return;}
@@ -733,7 +751,7 @@ function doSearch(q){
     (e.loc||'').toLowerCase().includes(term)||
     (e.notes||'').toLowerCase().includes(term)
   );
-  if(!matches.length){list.innerHTML='<div class="no-ev" style="padding:20px">No events found</div>';return;}
+  if(!matches.length){list.innerHTML='<div class="no-ev" style="padding:20px">No events found for "'+term+'"</div>';return;}
   const byDate={};
   matches.forEach(ev=>{if(!byDate[ev.date])byDate[ev.date]=[];byDate[ev.date].push(ev)});
   Object.keys(byDate).sort().forEach(ds=>{
@@ -753,7 +771,6 @@ function doSearch(q){
     });
     row.appendChild(dc);row.appendChild(ec);list.appendChild(row);
   });
-  showView('agenda',document.getElementById('tab-agenda'));
 }
 
 updateLabel();renderTasks();
