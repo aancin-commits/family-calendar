@@ -176,6 +176,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
     <button class="nav-btn" onclick="navNext()">›</button>
     <span class="month-label" id="month-label"></span>
     <button class="sync-btn" id="sync-btn" onclick="loadEvents()" title="Sync">↻</button>
+    <button class="sync-btn" onclick="toggleSearch()" title="Search">🔍</button>
+  </div>
+  <div id="search-bar" style="display:none;padding:8px 12px;border-bottom:1px solid #e8ecef;background:white">
+    <input type="text" id="search-input" placeholder="Search events..." oninput="doSearch(this.value)"
+      style="width:100%;font-size:14px;padding:8px 12px;border:1px solid #dde2e7;border-radius:20px;outline:none;background:#f8fafb;color:#1a1a1a"/>
   </div>
   <div class="tab-row">
     <button class="tab-btn active" id="tab-agenda" onclick="showView('agenda',this)">Agenda</button>
@@ -250,7 +255,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 </div>
 
 <!-- Google Identity Services -->
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client" onload="trySilentSignIn()" async defer></script>
 <script>
 const CLIENT_ID='660189922092-ebqbbfij93ckcpn4nkchd688og07ond1.apps.googleusercontent.com';
 const SCOPES='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
@@ -278,7 +283,12 @@ function initTokenClient(){
     client_id:CLIENT_ID,
     scope:SCOPES,
     callback:(resp)=>{
-      if(resp.error){console.error(resp);return;}
+      if(resp.error){
+        // Silent attempt failed — show login screen
+        document.getElementById('auth-screen').style.display='flex';
+        document.getElementById('main-app').style.display='none';
+        return;
+      }
       accessToken=resp.access_token;
       tokenExpiry=Date.now()+(resp.expires_in-60)*1000;
       document.getElementById('auth-screen').style.display='none';
@@ -291,13 +301,18 @@ function initTokenClient(){
 
 function signIn(){
   if(!tokenClient)initTokenClient();
-  tokenClient.requestAccessToken({prompt:'consent'});
+  tokenClient.requestAccessToken({prompt:'select_account'});
+}
+
+function trySilentSignIn(){
+  // Try to get token silently on startup — no prompt shown to user
+  initTokenClient();
+  tokenClient.requestAccessToken({prompt:''});
 }
 
 async function ensureToken(){
   if(accessToken&&Date.now()<tokenExpiry)return true;
   return new Promise(resolve=>{
-    if(!tokenClient)initTokenClient();
     tokenClient.callback=(resp)=>{
       if(resp.error){resolve(false);return;}
       accessToken=resp.access_token;
@@ -653,7 +668,55 @@ async function deleteCurrentTask(){
 }
 document.getElementById('postit-bg').addEventListener('click',function(e){if(e.target===this)closePostit()});
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closePostit()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closePostit();closeSearch()}});
+
+// ── SEARCH ────────────────────────────────────────────────
+let searching=false;
+function toggleSearch(){
+  const bar=document.getElementById('search-bar');
+  searching=!searching;
+  bar.style.display=searching?'block':'none';
+  if(searching){
+    document.getElementById('search-input').value='';
+    document.getElementById('search-input').focus();
+  } else {
+    buildAgenda(false);
+  }
+}
+function closeSearch(){
+  searching=false;
+  document.getElementById('search-bar').style.display='none';
+  document.getElementById('search-input').value='';
+}
+function doSearch(q){
+  const list=document.getElementById('agenda-list');
+  list.innerHTML='';
+  const term=q.trim().toLowerCase();
+  if(!term){buildAgenda(false);return;}
+  const matches=events.filter(e=>e.title.toLowerCase().includes(term)||(e.loc||'').toLowerCase().includes(term)||(e.notes||'').toLowerCase().includes(term));
+  if(!matches.length){list.innerHTML='<div class="no-ev" style="padding:20px">No events found</div>';return;}
+  // Group by date
+  const byDate={};
+  matches.forEach(ev=>{if(!byDate[ev.date])byDate[ev.date]=[];byDate[ev.date].push(ev)});
+  Object.keys(byDate).sort().forEach(ds=>{
+    const d=parseDate(ds);
+    const past=isPast(ds),tod=isToday(ds);
+    const row=document.createElement('div');row.className='day-row';
+    const dc=document.createElement('div');dc.className='day-col'+(tod?' today-col':past?' past':'');
+    dc.innerHTML=`<div class="day-dow">${d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}</div><div class="day-num">${d.getDate()}</div><div class="day-mon">${d.toLocaleDateString('en-US',{month:'short',year:'2-digit'}).toUpperCase()}</div>`;
+    dc.onclick=()=>openModal(ds);
+    const ec=document.createElement('div');ec.className='day-events';
+    byDate[ds].forEach(ev=>{
+      const timeStr=ev.allDay?'All day':`${fmtTime(ev.startTime)}–${fmtTime(ev.endTime)}`;
+      const evDiv=document.createElement('div');evDiv.className='ev';
+      evDiv.innerHTML=`<div class="ev-time">${timeStr}</div><div class="ev-title">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div>`;
+      evDiv.onclick=()=>openModal(ev.date,ev.id);
+      ec.appendChild(evDiv);
+    });
+    row.appendChild(dc);row.appendChild(ec);list.appendChild(row);
+  });
+  showView('agenda',document.getElementById('tab-agenda'));
+}
 
 updateLabel();renderTasks();
 </script>
