@@ -351,20 +351,38 @@ async function loadEvents(){
 
   if(!data){buildAgenda(true);buildMonth();return;}
   events=[];
-  (data.items||[]).forEach(item=>{
+  parseCalendarItems(data.items||[],events);
+  buildAgenda(true);buildMonth();
+}
+
+let allEvents=[];
+let allEventsLoaded=false;
+
+async function loadAllEvents(){
+  const now=new Date();
+  const start=new Date(now.getFullYear(),now.getMonth()-6,1).toISOString();
+  const end=new Date(now.getFullYear(),now.getMonth()+13,0,23,59,59).toISOString();
+  const url=`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=2500`;
+  const data=await apiCall(url);
+  if(!data)return;
+  allEvents=[];
+  parseCalendarItems(data.items||[],allEvents);
+  allEventsLoaded=true;
+}
+
+function parseCalendarItems(items,target){
+  items.forEach(item=>{
     if(item.status==='cancelled')return;
     const dateStr=item.start?.date||item.start?.dateTime?.split('T')[0];
     if(!dateStr)return;
     const startTime=item.start?.dateTime?item.start.dateTime.split('T')[1].slice(0,5):null;
     const endTime=item.end?.dateTime?item.end.dateTime.split('T')[1].slice(0,5):null;
     const allDay=!!item.start?.date;
-    // Decode who from extendedProperties
     let who=[];
     try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
-    if(!who.length)who=['angel'];// default
-    events.push({id:item.id,date:dateStr,startTime,endTime,allDay,title:item.summary||'(no title)',loc:item.location||'',notes:item.description||'',who,gcal:true});
+    if(!who.length)who=['angel'];
+    target.push({id:item.id,date:dateStr,startTime,endTime,allDay,title:item.summary||'(no title)',loc:item.location||'',notes:item.description||'',who,gcal:true});
   });
-  buildAgenda(true);buildMonth();
 }
 
 async function updateGCalEvent(ev){
@@ -672,13 +690,18 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeP
 
 // ── SEARCH ────────────────────────────────────────────────
 let searching=false;
-function toggleSearch(){
+async function toggleSearch(){
   const bar=document.getElementById('search-bar');
   searching=!searching;
   bar.style.display=searching?'block':'none';
   if(searching){
     document.getElementById('search-input').value='';
     document.getElementById('search-input').focus();
+    if(!allEventsLoaded){
+      document.getElementById('search-input').placeholder='Loading events...';
+      await loadAllEvents();
+      document.getElementById('search-input').placeholder='Search events...';
+    }
   } else {
     buildAgenda(false);
   }
@@ -693,9 +716,13 @@ function doSearch(q){
   list.innerHTML='';
   const term=q.trim().toLowerCase();
   if(!term){buildAgenda(false);return;}
-  const matches=events.filter(e=>e.title.toLowerCase().includes(term)||(e.loc||'').toLowerCase().includes(term)||(e.notes||'').toLowerCase().includes(term));
+  const pool=allEventsLoaded?allEvents:events;
+  const matches=pool.filter(e=>
+    e.title.toLowerCase().includes(term)||
+    (e.loc||'').toLowerCase().includes(term)||
+    (e.notes||'').toLowerCase().includes(term)
+  );
   if(!matches.length){list.innerHTML='<div class="no-ev" style="padding:20px">No events found</div>';return;}
-  // Group by date
   const byDate={};
   matches.forEach(ev=>{if(!byDate[ev.date])byDate[ev.date]=[];byDate[ev.date].push(ev)});
   Object.keys(byDate).sort().forEach(ds=>{
@@ -704,13 +731,13 @@ function doSearch(q){
     const row=document.createElement('div');row.className='day-row';
     const dc=document.createElement('div');dc.className='day-col'+(tod?' today-col':past?' past':'');
     dc.innerHTML=`<div class="day-dow">${d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}</div><div class="day-num">${d.getDate()}</div><div class="day-mon">${d.toLocaleDateString('en-US',{month:'short',year:'2-digit'}).toUpperCase()}</div>`;
-    dc.onclick=()=>openModal(ds);
+    dc.onclick=()=>{closeSearch();openModal(ds)};
     const ec=document.createElement('div');ec.className='day-events';
     byDate[ds].forEach(ev=>{
       const timeStr=ev.allDay?'All day':`${fmtTime(ev.startTime)}–${fmtTime(ev.endTime)}`;
       const evDiv=document.createElement('div');evDiv.className='ev';
       evDiv.innerHTML=`<div class="ev-time">${timeStr}</div><div class="ev-title">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div>`;
-      evDiv.onclick=()=>openModal(ev.date,ev.id);
+      evDiv.onclick=()=>{closeSearch();openModal(ev.date,ev.id)};
       ec.appendChild(evDiv);
     });
     row.appendChild(dc);row.appendChild(ec);list.appendChild(row);
