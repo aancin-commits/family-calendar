@@ -266,7 +266,7 @@ const COLORS={angel:'#2196F3',raluca:'#4CAF50',victor:'#F44336'};
 const TAG_BG={angel:'#E3F2FD',raluca:'#E8F5E9',victor:'#FFEBEE'};
 const TAG_TXT={angel:'#0D47A1',raluca:'#2E7D32',victor:'#B71C1C'};
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const WDAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const WDAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const today=new Date();today.setHours(0,0,0,0);
 const todayStr=fmtDate(today);
 
@@ -469,7 +469,9 @@ function buildMonth(){
   const mc=document.getElementById('month-cells');mc.innerHTML='';
   const first=new Date(curYear,curMonth,1);
   const last=new Date(curYear,curMonth+1,0);
-  for(let i=0;i<first.getDay();i++){const c=document.createElement('div');c.className='mcell other-month';mc.appendChild(c)}
+  // Monday-based offset: Sun=0 becomes 6, Mon=1 becomes 0, etc.
+  const offset=(first.getDay()+6)%7;
+  for(let i=0;i<offset;i++){const c=document.createElement('div');c.className='mcell other-month';mc.appendChild(c)}
   for(let d=1;d<=last.getDate();d++){
     const ds=`${curYear}-${String(curMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const evs=events.filter(e=>e.date===ds);
@@ -491,6 +493,8 @@ function showView(v,btn){
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');btn.classList.add('active');
+  // Hide search bar when switching to tasks
+  if(v==='tasks'){closeSearch();}
   if(v==='agenda')buildAgenda(curYear===today.getFullYear()&&curMonth===today.getMonth());
 }
 
@@ -566,14 +570,18 @@ async function saveEvent(){
     if(editingEventId){
       await updateGCalEvent(ev);
       events=events.map(e=>e.id===editingEventId?{...ev,gcal:true}:e);
+      allEvents=allEvents.map(e=>e.id===editingEventId?{...ev,gcal:true}:e);
     } else {
       const created=await createGCalEvent(ev);
       if(created){ev.id=created.id;ev.gcal=true;}
       events.push(ev);
+      allEvents.push(ev);
     }
   } else {
-    if(editingEventId){events=events.map(e=>e.id===editingEventId?ev:e);}
-    else{ev.id='local-'+Date.now();events.push(ev);}
+    if(editingEventId){
+      events=events.map(e=>e.id===editingEventId?ev:e);
+      allEvents=allEvents.map(e=>e.id===editingEventId?ev:e);
+    } else{ev.id='local-'+Date.now();events.push(ev);allEvents.push(ev);}
   }
 
   closeModal();buildAgenda(false);buildMonth();
@@ -585,6 +593,7 @@ async function deleteEvent(){
   if(!confirm('Delete this event?'))return;
   if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events/${editingEventId}`,'DELETE');}
   events=events.filter(e=>e.id!==editingEventId);
+  allEvents=allEvents.filter(e=>e.id!==editingEventId);
   closeModal();buildAgenda(false);buildMonth();
 }
 
