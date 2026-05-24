@@ -364,9 +364,11 @@ async function loadAllEvents(){
   const end=new Date(now.getFullYear(),now.getMonth()+13,0,23,59,59).toISOString();
   const url=`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=2500`;
   const data=await apiCall(url);
+  console.log('[Search] loadAllEvents response:',data);
   if(!data)return;
   allEvents=[];
   parseCalendarItems(data.items||[],allEvents);
+  console.log('[Search] allEvents loaded:',allEvents.length,allEvents.map(e=>e.title));
   allEventsLoaded=true;
 }
 
