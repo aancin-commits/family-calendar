@@ -432,7 +432,9 @@ async function createGCalEvent(ev){
 }
 
 // ── HELPERS ───────────────────────────────────────────────
-function fmtDate(d){return d.toISOString().split('T')[0]}
+function fmtDate(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function parseDate(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=parseInt(h);return`${hr>12?hr-12:hr||12}:${m}${hr>=12?'p':'a'}`}
 function isPast(ds){return ds<todayStr}
