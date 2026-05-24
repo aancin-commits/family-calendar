@@ -255,6 +255,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 const CLIENT_ID='660189922092-ebqbbfij93ckcpn4nkchd688og07ond1.apps.googleusercontent.com';
 const SCOPES='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 const TASKS_LIST_ID='@default';
+const CAL_ID='family14710344233259970526@group.calendar.google.com';
 
 const COLORS={angel:'#2196F3',raluca:'#4CAF50',victor:'#F44336'};
 const TAG_BG={angel:'#E3F2FD',raluca:'#E8F5E9',victor:'#FFEBEE'};
@@ -329,7 +330,7 @@ async function loadEvents(){
 
   const start=new Date(curYear,curMonth,1).toISOString();
   const end=new Date(curYear,curMonth+1,0,23,59,59).toISOString();
-  const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=250`;
+  const url=`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=250`;
   const data=await apiCall(url);
   btn.classList.remove('spinning');
 
@@ -359,7 +360,7 @@ async function updateGCalEvent(ev){
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
   }
   body.extendedProperties={private:{familyWho:JSON.stringify(ev.who)}};
-  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.id}`,'PUT',body);
+  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events/${ev.id}`,'PUT',body);
 }
 
 async function createGCalEvent(ev){
@@ -380,7 +381,7 @@ async function createGCalEvent(ev){
     const rrMap={DAILY:'RRULE:FREQ=DAILY',WEEKLY:'RRULE:FREQ=WEEKLY',BIWEEKLY:'RRULE:FREQ=WEEKLY;INTERVAL=2',MONTHLY:'RRULE:FREQ=MONTHLY',YEARLY:'RRULE:FREQ=YEARLY'};
     if(rrMap[ev.repeat])body.recurrence=[rrMap[ev.repeat]];
   }
-  const data=await apiCall('https://www.googleapis.com/calendar/v3/calendars/primary/events','POST',body);
+  const data=await apiCall('https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events','POST',body);
   return data;
 }
 
@@ -549,7 +550,7 @@ async function saveEvent(){
 async function deleteEvent(){
   if(!editingEventId)return;
   if(!confirm('Delete this event?'))return;
-  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${editingEventId}`,'DELETE');}
+  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events/${editingEventId}`,'DELETE');}
   events=events.filter(e=>e.id!==editingEventId);
   closeModal();buildAgenda(false);buildMonth();
 }
