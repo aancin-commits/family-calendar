@@ -347,7 +347,7 @@ async function loadEvents(){
   const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
   const start=new Date(curYear,curMonth,1,0,0,0).toISOString();
   const end=new Date(curYear,curMonth+1,0,23,59,59).toISOString();
-  const url=`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=250&timeZone=${encodeURIComponent(tz)}`;
+  const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=250&timeZone=${encodeURIComponent(tz)}`;
   const data=await apiCall(url);
   btn.classList.remove('spinning');
 
@@ -365,7 +365,7 @@ async function loadAllEvents(){
   const now=new Date();
   const start=new Date(now.getFullYear(),now.getMonth()-6,1).toISOString();
   const end=new Date(now.getFullYear(),now.getMonth()+13,0,23,59,59).toISOString();
-  const url=`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=2500`;
+  const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=2500`;
   const data=await apiCall(url);
   console.log('[Search] loadAllEvents response:',data);
   if(!data)return;
@@ -406,7 +406,7 @@ async function updateGCalEvent(ev){
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
   }
   body.extendedProperties={private:{familyWho:JSON.stringify(ev.who)}};
-  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events/${ev.id}`,'PUT',body);
+  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ev.id}`,'PUT',body);
 }
 
 async function createGCalEvent(ev){
@@ -427,7 +427,7 @@ async function createGCalEvent(ev){
     const rrMap={DAILY:'RRULE:FREQ=DAILY',WEEKLY:'RRULE:FREQ=WEEKLY',BIWEEKLY:'RRULE:FREQ=WEEKLY;INTERVAL=2',MONTHLY:'RRULE:FREQ=MONTHLY',YEARLY:'RRULE:FREQ=YEARLY'};
     if(rrMap[ev.repeat])body.recurrence=[rrMap[ev.repeat]];
   }
-  const data=await apiCall('https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events','POST',body);
+  const data=await apiCall('https://www.googleapis.com/calendar/v3/calendars/primary/events','POST',body);
   return data;
 }
 
@@ -610,7 +610,7 @@ async function saveEvent(){
 async function deleteEvent(){
   if(!editingEventId)return;
   if(!confirm('Delete this event?'))return;
-  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/family14710344233259970526%40group.calendar.google.com/events/${editingEventId}`,'DELETE');}
+  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${editingEventId}`,'DELETE');}
   events=events.filter(e=>e.id!==editingEventId);
   allEvents=allEvents.filter(e=>e.id!==editingEventId);
   closeModal();buildAgenda(false);buildMonth();
