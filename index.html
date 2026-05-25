@@ -44,30 +44,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .view{display:none;flex:1;overflow:hidden}.view.active{display:flex;flex-direction:column}
 
 /* AGENDA */
-.agenda{overflow-y:auto;flex:1}
-.day-row{display:flex;border-bottom:0.5px solid #e8ecef}
-.day-col{width:76px;min-width:76px;background:var(--blue);color:white;padding:8px 6px;text-align:center;cursor:pointer;flex-shrink:0;transition:background 0.1s}
-.day-col:hover{background:var(--dark)}
-.day-col.past{background:#9ec8dc}
-.day-col.today-col{background:var(--dark);border-left:3px solid var(--orange)}
-.day-dow{font-size:10px;font-weight:600;text-transform:uppercase;opacity:0.9}
-.day-num{font-size:22px;font-weight:300;line-height:1.1}
-.day-mon{font-size:10px;opacity:0.85;text-transform:uppercase}
-.day-events{flex:1}
-.ev{padding:8px 10px;border-bottom:0.5px solid #f0f4f7;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+.agenda{overflow-y:auto;flex:1;background:white}
+.day-row{display:block;border-bottom:2px solid #8f8f8f;background:white}
+.day-header{height:30px;display:flex;align-items:center;gap:16px;padding:0 10px 0 12px;background:linear-gradient(#f7f7f7,#eeeeee);border-top:1px solid #d6d6d6;border-bottom:1px solid #d0d0d0;box-shadow:0 1px 3px rgba(0,0,0,0.18);cursor:pointer;color:#333}
+.day-header.today-header{background:linear-gradient(#d6eff8,#c5e8f3);border-top-color:#b7dce8;border-bottom-color:#b7dce8}
+.day-header.past-header{color:#777;background:linear-gradient(#fafafa,#f0f0f0)}
+.day-head-dow{font-size:20px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;min-width:46px;text-align:right}
+.day-head-date{font-size:20px;font-weight:800;white-space:nowrap}
+.day-head-date span{font-weight:400;color:#444}
+.day-events{background:white}
+.ev{display:flex;align-items:flex-start;gap:10px;padding:8px 10px 9px 8px;border-bottom:1px dotted #d7d7d7;cursor:pointer;min-height:64px;background:white}
 .ev:last-child{border-bottom:none}
 .ev:hover{background:#f8fafb}
-.ev-time-stack{width:42px;min-width:42px;color:#888;font-size:12px;line-height:1.25;text-align:left;padding-top:1px}
-.ev-time-start{font-weight:700;color:#555}
-.ev-time-end{color:#888;margin-top:2px}
-.ev-time-allday{font-weight:700;color:#555;line-height:1.15}
-.ev-main{flex:1;min-width:0}
-.ev-title{font-size:13px;color:#1a1a1a;margin-bottom:3px}
-.ev-title.past-title{color:#aaa}
-.ev-tags{display:flex;gap:4px;flex-wrap:wrap}
-.tag{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 7px;border-radius:10px}
-.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
-.no-ev{padding:10px;font-size:12px;color:#bbb;font-style:italic}
+.ev-time-stack{width:86px;min-width:86px;color:#333;font-size:20px;line-height:1.12;text-align:right;padding-top:1px;letter-spacing:-0.02em}
+.ev-time-start{font-weight:800;color:#333}
+.ev-time-end{font-weight:400;color:#444;margin-top:5px}
+.ev-time-allday{font-weight:800;color:#333;line-height:1.05;text-align:left;font-size:20px}
+.ev-main{flex:1;min-width:0;padding-left:3px}
+.ev-title{font-size:20px;line-height:1.18;color:#2b2b2b;margin-bottom:8px;font-weight:400;word-break:break-word}
+.ev-title strong,.ev-title-main{font-weight:800}
+.ev-title.past-title{color:#999}
+.ev-person{display:flex;align-items:center;gap:7px;font-size:20px;line-height:1.1;color:#4f4f4f;font-weight:400}
+.ev-person .dot{width:13px;height:13px;border-radius:50%;display:inline-block;flex-shrink:0}
+.ev-tags{display:flex;gap:8px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:7px;font-size:20px;line-height:1.1;padding:0;border-radius:0;background:transparent!important;color:#4f4f4f!important}
+.dot{width:13px;height:13px;border-radius:50%;display:inline-block;flex-shrink:0}
+.no-ev{padding:8px 12px 10px 106px;font-size:16px;color:#aaa;font-style:italic;border-bottom:1px dotted #e0e0e0}
+@media(max-width:420px){.day-head-dow{font-size:18px;min-width:42px}.day-head-date{font-size:18px}.ev-time-stack{width:76px;min-width:76px;font-size:18px}.ev-time-allday{font-size:18px}.ev-title{font-size:18px}.tag,.ev-person{font-size:18px}.no-ev{padding-left:96px}}
 
 /* MONTH */
 .month-scroll{overflow-y:auto;flex:1}
@@ -451,6 +454,14 @@ function tagsHTML(who){
   return who.map(w=>`<span class="tag" style="background:${TAG_BG[w]};color:${TAG_TXT[w]}"><span class="dot" style="background:${COLORS[w]}"></span>${w[0].toUpperCase()+w.slice(1)}</span>`).join('');
 }
 
+function agendaDateLabel(d,ds){
+  const base=d.toLocaleDateString('en-US',{day:'numeric',month:'short'});
+  if(isToday(ds))return `${base} <span>(Today)</span>`;
+  const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
+  if(ds===fmtDate(tomorrow))return `${base} <span>(Tomorrow)</span>`;
+  return base;
+}
+
 // ── AGENDA ────────────────────────────────────────────────
 function buildAgenda(scrollToToday){
   const list=document.getElementById('agenda-list');list.innerHTML='';
@@ -462,9 +473,12 @@ function buildAgenda(scrollToToday){
     const past=isPast(ds),tod=isToday(ds);
     const row=document.createElement('div');row.className='day-row';
     if(tod)row.id='today-row';
-    const dc=document.createElement('div');dc.className='day-col'+(tod?' today-col':past?' past':'');
-    dc.innerHTML=`<div class="day-dow">${d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}</div><div class="day-num">${d.getDate()}</div><div class="day-mon">${d.toLocaleDateString('en-US',{month:'short'}).toUpperCase()}</div>`;
-    dc.onclick=()=>openModal(ds);
+
+    const dh=document.createElement('div');
+    dh.className='day-header'+(tod?' today-header':past?' past-header':'');
+    dh.innerHTML=`<div class="day-head-dow">${d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}</div><div class="day-head-date">${agendaDateLabel(d,ds)}</div>`;
+    dh.onclick=()=>openModal(ds);
+
     const ec=document.createElement('div');ec.className='day-events';
     if(!evs.length){ec.innerHTML='<div class="no-ev">No events</div>'}
     else evs.forEach(ev=>{
@@ -473,7 +487,7 @@ function buildAgenda(scrollToToday){
       evDiv.onclick=()=>openModal(ev.date,ev.id);
       ec.appendChild(evDiv);
     });
-    row.appendChild(dc);row.appendChild(ec);list.appendChild(row);
+    row.appendChild(dh);row.appendChild(ec);list.appendChild(row);
   }
   if(scrollToToday){
     const todEl=document.getElementById('today-row');
