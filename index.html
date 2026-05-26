@@ -65,12 +65,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .ev-main{flex:1;min-width:0;padding-left:0}
 .ev-title{font-size:20px;line-height:1.18;color:#2b2b2b;margin-bottom:8px;font-weight:400;word-break:break-word}
 .ev-title strong,.ev-title-main{font-weight:800}
+.ev-location{color:#777;font-size:.9em;font-weight:400}
+.ev-note-icon{font-size:.82em;color:#777;margin-left:5px;vertical-align:baseline}
 .ev-title.past-title{color:#999}
 .ev-tags{display:flex;gap:7px;flex-wrap:wrap}
 .tag{display:inline-flex;align-items:center;gap:7px;font-size:18px;line-height:1.1;padding:2px 9px 3px;border-radius:14px;font-weight:400}
 .dot{width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0}
 .no-ev{padding:12px;font-size:16px;color:#aaa;font-style:italic;border-bottom:1px dotted #e0e0e0}
-@media(max-width:420px){.day-col{width:70px;min-width:70px}.day-dow{font-size:13px}.day-num{font-size:28px}.day-mon{font-size:12px}.ev{gap:5px;padding-left:5px}.ev-time-stack{width:54px;min-width:54px;font-size:18px}.ev-time-allday{font-size:18px}.ev-title{font-size:18px}.tag{font-size:17px}.dot{width:11px;height:11px}.tab-btn{font-size:15px;padding:12px 8px}}
+@media(max-width:420px){.day-col{width:70px;min-width:70px}.day-dow{font-size:13px}.day-num{font-size:28px}.day-mon{font-size:12px}.ev{gap:5px;padding-left:5px}.ev-time-stack{width:54px;min-width:54px;font-size:18px}.ev-time-allday{font-size:18px}.ev-title{font-size:18px}.tag{font-size:17px}.dot{width:11px;height:11px}.tab-btn{font-size:15px;padding:12px 8px}.ev-note-icon{margin-left:3px}}
 
 /* MONTH */
 .month-scroll{overflow-y:auto;flex:1}
@@ -124,8 +126,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .fi{border:none;border-bottom:1px solid #e0e4e8;background:none;font-size:14px;color:#1a1a1a;padding:3px 0;outline:none;width:100%}
 .fi:focus{border-bottom-color:var(--blue)}
 .fs{border:none;border-bottom:1px solid #e0e4e8;background:none;font-size:13px;color:#1a1a1a;padding:3px 0;outline:none;flex:1;cursor:pointer}
+.repeat-end-section{display:none}
+.repeat-end-section.open{display:block}
+.repeat-end-hint{font-size:11px;color:#999;line-height:1.35;margin-top:-4px;margin-left:32px}
 .time-pair{display:flex;gap:8px;flex:1}
-.time-pair input{flex:1;border:none;border-bottom:1px solid #e0e4e8;background:none;font-size:13px;color:#1a1a1a;padding:3px 0;outline:none}
+.time-pair input{flex:1;border:none;border-bottom:1px solid #e0e4e8;background:none;font-size:16px;color:#1a1a1a;padding:8px 0;outline:none;min-height:42px;cursor:pointer}
 .who-grid{display:flex;flex-direction:column;gap:8px;flex:1}
 .who-item{display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 0}
 .who-item input[type=checkbox]{width:17px;height:17px;accent-color:var(--blue);cursor:pointer}
@@ -235,11 +240,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
     <div class="modal-section">
       <div class="modal-row" style="justify-content:space-between"><span class="icon">🕐</span><label>All day event</label><button class="toggle" id="allday-toggle" onclick="toggleAllDay(this)"></button></div>
       <div id="time-fields">
-        <div class="modal-row"><label style="min-width:50px">Starts</label><input type="date" class="fi" id="ev-start-date" style="width:auto;flex:1"/><div class="time-pair"><input type="time" id="ev-start-time" value="12:00"/></div></div>
-        <div class="modal-row"><label style="min-width:50px">Ends</label><input type="date" class="fi" id="ev-end-date" style="width:auto;flex:1"/><div class="time-pair"><input type="time" id="ev-end-time" value="13:00"/></div></div>
+        <div class="modal-row"><label style="min-width:50px">Starts</label><input type="date" class="fi" id="ev-start-date" style="width:auto;flex:1"/><div class="time-pair"><input type="time" id="ev-start-time" value="12:00" step="300" onclick="this.showPicker&&this.showPicker()"/></div></div>
+        <div class="modal-row"><label style="min-width:50px">Ends</label><input type="date" class="fi" id="ev-end-date" style="width:auto;flex:1"/><div class="time-pair"><input type="time" id="ev-end-time" value="13:00" step="300" onclick="this.showPicker&&this.showPicker()"/></div></div>
       </div>
     </div>
-    <div class="modal-section"><div class="modal-row"><span class="icon">🔁</span><label>Repeats</label><select class="fs" id="ev-repeat"><option value="none">Never</option><option value="DAILY">Every day</option><option value="WEEKLY">Every week</option><option value="BIWEEKLY">Every 2 weeks</option><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></div></div>
+    <div class="modal-section"><div class="modal-row"><span class="icon">🔁</span><label>Repeats</label><select class="fs" id="ev-repeat" onchange="toggleRepeatEnd()"><option value="none">Never</option><option value="DAILY">Every day</option><option value="WEEKLY">Every week</option><option value="BIWEEKLY">Every 2 weeks</option><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></div></div>
+    <div class="modal-section repeat-end-section" id="repeat-end-section">
+      <div class="modal-row"><span class="icon">🏁</span><label>Ends on</label><input type="date" class="fi" id="ev-repeat-end" style="width:auto;flex:1"/></div>
+      <div class="repeat-end-hint">Leave empty for no end date.</div>
+    </div>
     <div class="modal-section"><div class="modal-row"><span class="icon">🔔</span><label>Reminder</label><select class="fs" id="ev-reminder"><option value="">None</option><option value="0">At time of event</option><option value="5">5 min before</option><option value="15">15 min before</option><option value="30">30 min before</option><option value="60">1 hour before</option><option value="1440">1 day before</option></select></div></div>
     <div class="modal-section">
       <div class="modal-row" style="align-items:flex-start"><span class="icon" style="margin-top:2px">📝</span><textarea class="notes-area" id="ev-notes" placeholder="Notes" oninput="document.getElementById('cc').textContent=this.value.length+' / 8000'"></textarea></div>
@@ -413,6 +422,8 @@ async function updateGCalEvent(ev){
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
   }
   body.extendedProperties={private:{familyWho:JSON.stringify(ev.who)}};
+  const rrule=buildRecurrenceRule(ev);
+  if(rrule)body.recurrence=[rrule];
   return apiCall(`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events/${ev.id}`,'PUT',body);
 }
 
@@ -430,10 +441,8 @@ async function createGCalEvent(ev){
     body.reminders={useDefault:false,overrides:[{method:'popup',minutes:parseInt(ev.reminder)||0}]};
   }
   // Recurrence
-  if(ev.repeat&&ev.repeat!=='none'){
-    const rrMap={DAILY:'RRULE:FREQ=DAILY',WEEKLY:'RRULE:FREQ=WEEKLY',BIWEEKLY:'RRULE:FREQ=WEEKLY;INTERVAL=2',MONTHLY:'RRULE:FREQ=MONTHLY',YEARLY:'RRULE:FREQ=YEARLY'};
-    if(rrMap[ev.repeat])body.recurrence=[rrMap[ev.repeat]];
-  }
+  const rrule=buildRecurrenceRule(ev);
+  if(rrule)body.recurrence=[rrule];
   const data=await apiCall('https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events','POST',body);
   return data;
 }
@@ -445,6 +454,22 @@ function fmtDate(d){
 function parseDate(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=parseInt(h);return`${hr>12?hr-12:hr||12}:${m}${hr>=12?'p':'a'}`}
 function agendaTimeHTML(ev){return ev.allDay?'<div class="ev-time-stack"><div class="ev-time-allday">All<br>Day</div></div>':`<div class="ev-time-stack"><div class="ev-time-start">${fmtTime(ev.startTime)}</div><div class="ev-time-end">${fmtTime(ev.endTime)}</div></div>`}
+function escapeHTML(v){return String(v||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function hasNotes(ev){return !!(ev.notes&&ev.notes.replace(/<[^>]*>/g,'').trim())}
+function agendaTitleHTML(ev){
+  const title=escapeHTML(ev.title);
+  const loc=ev.loc?` <span class="ev-location">(${escapeHTML(ev.loc)})</span>`:'';
+  const note=hasNotes(ev)?'<span class="ev-note-icon" title="Has notes">📝</span>':'';
+  return `${title}${loc}${note}`;
+}
+function buildRecurrenceRule(ev){
+  if(!ev.repeat||ev.repeat==='none')return null;
+  const rrMap={DAILY:'RRULE:FREQ=DAILY',WEEKLY:'RRULE:FREQ=WEEKLY',BIWEEKLY:'RRULE:FREQ=WEEKLY;INTERVAL=2',MONTHLY:'RRULE:FREQ=MONTHLY',YEARLY:'RRULE:FREQ=YEARLY'};
+  let rule=rrMap[ev.repeat];
+  if(!rule)return null;
+  if(ev.repeatEnd)rule+=`;UNTIL=${ev.repeatEnd.replaceAll('-','')}T235959Z`;
+  return rule;
+}
 function isPast(ds){return ds<todayStr}
 function isToday(ds){return ds===todayStr}
 
@@ -483,7 +508,7 @@ function buildAgenda(scrollToToday){
     if(!evs.length){ec.innerHTML='<div class="no-ev">No events</div>'}
     else evs.forEach(ev=>{
       const evDiv=document.createElement('div');evDiv.className='ev';
-      evDiv.innerHTML=`${agendaTimeHTML(ev)}<div class="ev-main"><div class="ev-title${past?' past-title':''}">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div></div>`;
+      evDiv.innerHTML=`${agendaTimeHTML(ev)}<div class="ev-main"><div class="ev-title${past?' past-title':''}">${agendaTitleHTML(ev)}</div><div class="ev-tags">${tagsHTML(ev.who)}</div></div>`;
       evDiv.onclick=()=>openModal(ev.date,ev.id);
       ec.appendChild(evDiv);
     });
@@ -561,6 +586,10 @@ function openModal(ds,eventId=null){
   allDay?tog.classList.add('on'):tog.classList.remove('on');
   document.getElementById('time-fields').style.opacity=allDay?'0.3':'1';
 
+  document.getElementById('ev-repeat').value='none';
+  document.getElementById('ev-repeat-end').value='';
+  toggleRepeatEnd();
+
   const who=ev?ev.who:['angel','raluca','victor'];
   ['angel','raluca','victor'].forEach(p=>document.getElementById('who-'+p).checked=who.includes(p));
   document.getElementById('ev-title').classList.remove('field-error');
@@ -581,6 +610,13 @@ document.getElementById('ev-start-time').addEventListener('change',function(){
   document.getElementById('ev-end-time').value=`${String(endH).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 });
 
+function toggleRepeatEnd(){
+  const repeat=document.getElementById('ev-repeat').value;
+  const sec=document.getElementById('repeat-end-section');
+  if(repeat&&repeat!=='none')sec.classList.add('open');
+  else{sec.classList.remove('open');document.getElementById('ev-repeat-end').value='';}
+}
+
 async function saveEvent(){
   const title=document.getElementById('ev-title').value.trim();
   if(!title){document.getElementById('ev-title').classList.add('field-error');return;}
@@ -599,6 +635,7 @@ async function saveEvent(){
     loc:document.getElementById('ev-loc').value,
     notes:document.getElementById('ev-notes').value,
     repeat:document.getElementById('ev-repeat').value,
+    repeatEnd:document.getElementById('ev-repeat-end').value,
     reminder:document.getElementById('ev-reminder').value,
     who
   };
@@ -819,7 +856,7 @@ function doSearch(q){
     const ec=document.createElement('div');ec.className='day-events';
     byDate[ds].forEach(ev=>{
       const evDiv=document.createElement('div');evDiv.className='ev';
-      evDiv.innerHTML=`${agendaTimeHTML(ev)}<div class="ev-main"><div class="ev-title">${ev.title}</div><div class="ev-tags">${tagsHTML(ev.who)}</div></div>`;
+      evDiv.innerHTML=`${agendaTimeHTML(ev)}<div class="ev-main"><div class="ev-title">${agendaTitleHTML(ev)}</div><div class="ev-tags">${tagsHTML(ev.who)}</div></div>`;
       evDiv.onclick=()=>{closeSearch();openModal(ev.date,ev.id)};
       ec.appendChild(evDiv);
     });
