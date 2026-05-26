@@ -442,6 +442,32 @@ async function loadAllEvents(){
   allEventsLoaded=true;
 }
 
+function coziWhoFromPrefix(summary){
+  const raw=(summary||'').trim();
+  const m=raw.match(/^([^:]{1,40}):\s*(.+)$/);
+  if(!m)return{who:[],title:raw||'(no title)',hasCoziPrefix:false};
+  const prefix=m[1].trim().toLowerCase();
+  const title=m[2].trim()||raw;
+  const normalized=prefix.replace(/\s+/g,'');
+  const map={
+    all:['angel','raluca','victor'],
+    angel:['angel'],
+    raluca:['raluca'],
+    victor:['victor'],
+    'angel/raluca':['angel','raluca'],
+    'raluca/angel':['angel','raluca'],
+    'angel-victor':['angel','victor'],
+    'victor-angel':['angel','victor'],
+    'angel/victor':['angel','victor'],
+    'victor/angel':['angel','victor'],
+    'raluca-victor':['raluca','victor'],
+    'victor-raluca':['raluca','victor'],
+    'raluca/victor':['raluca','victor'],
+    'victor/raluca':['raluca','victor']
+  };
+  return{who:map[normalized]||[],title:map[normalized]?title:raw,hasCoziPrefix:!!map[normalized]};
+}
+
 function parseCalendarItems(items,target){
   items.forEach(item=>{
     if(item.status==='cancelled')return;
@@ -450,7 +476,7 @@ function parseCalendarItems(items,target){
     if(allDay){
       dateStr=item.start.date;
     } else {
-      // Parse as local time to avoid UTC offset shifting date/time
+      // Parse as local time to avoid UTC offset shifting events into wrong day/hour
       const startDt=new Date(item.start.dateTime);
       const endDt=new Date(item.end.dateTime);
       dateStr=fmtDate(startDt);
@@ -458,10 +484,13 @@ function parseCalendarItems(items,target){
       endTime=`${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`;
     }
     if(!dateStr)return;
+    const rawTitle=item.summary||'(no title)';
+    const cozi=coziWhoFromPrefix(rawTitle);
     let who=[];
     try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
+    if(!who.length&&cozi.who.length)who=cozi.who;
     if(!who.length)who=['angel'];
-    target.push({id:item.id,date:dateStr,startTime,endTime,allDay,title:item.summary||'(no title)',loc:item.location||'',notes:item.description||'',who,gcal:true});
+    target.push({id:item.id,date:dateStr,startTime,endTime,allDay,title:cozi.title,rawTitle,loc:item.location||'',notes:item.description||'',who,gcal:true});
   });
 }
 
