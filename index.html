@@ -117,19 +117,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 
 /* MONTH */
 .month-scroll{overflow-y:auto;flex:1}
-.month-grid{padding:8px}
-.wday-row{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px}
-.wday-cell{font-size:10px;font-weight:600;color:#888;padding:2px 0}
-.month-cells{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.mcell{min-height:42px;border-radius:4px;padding:3px;cursor:pointer}
+.month-grid{padding:10px}
+.wday-row{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:6px}
+.wday-cell{font-size:13px;font-weight:700;color:#888;padding:4px 0}
+.month-cells{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.mcell{min-height:74px;border-radius:8px;padding:6px 5px;cursor:pointer;border:1px solid transparent;overflow:hidden}
 .mcell:hover{background:#f0f4f7}
 .mcell.other-month .mday{color:#ccc}
-.mcell.past-cell .mday{color:#bbb}
-.mcell.today-cell{background:#E3F2FD}
-.mcell.today-cell .mday{color:var(--blue);font-weight:600}
-.mday{font-size:12px;text-align:center;margin-bottom:2px}
-.mdots{display:flex;gap:2px;flex-wrap:wrap;justify-content:center}
-.mdot{width:5px;height:5px;border-radius:50%}
+.mcell.past-cell .mday{color:#aaa}
+.mcell.today-cell{background:#E3F2FD;border-color:#c7e5fb}
+.mcell.today-cell .mday{color:var(--blue);font-weight:800}
+.mday{font-size:20px;line-height:1;font-weight:650;text-align:left;margin-bottom:5px}
+.mevents{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mevent{font-size:11px;line-height:1.15;padding:2px 4px;border-radius:5px;background:#f3f7fa;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid #bbb}
+.mevent.all-day{font-weight:700;background:#eef7fb}
+.mmore{font-size:10px;color:#777;padding-left:2px;margin-top:1px}
+.mdots{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-start;margin-top:2px}
+.mdot{width:6px;height:6px;border-radius:50%}
+@media(max-width:520px){
+  .month-grid{padding:7px 5px}
+  .wday-cell{font-size:12px}
+  .month-cells{gap:2px}
+  .mcell{min-height:58px;padding:5px 3px;border-radius:6px}
+  .mday{font-size:18px;margin-bottom:3px;text-align:center}
+  .mevent{font-size:9px;padding:1px 3px;border-left-width:2px}
+  .mmore{font-size:9px}
+}
+@media(min-width:760px){
+  .month-grid{padding:16px}
+  .month-cells{gap:8px}
+  .mcell{min-height:118px;padding:8px}
+  .mday{font-size:22px}
+  .mevent{font-size:12px;padding:3px 5px}
+}
 
 /* TASKS */
 .tasks-scroll{overflow-y:auto;flex:1;padding:12px}
@@ -752,6 +772,37 @@ function buildWeek(){
 }
 
 // ── MONTH ─────────────────────────────────────────────────
+function monthEventTitle(ev){
+  const time=ev.allDay?'':(ev.startTime?`${fmtTime(ev.startTime)} `:'');
+  return `${time}${ev.title}`.trim();
+}
+function monthEventBorder(ev){
+  if(ev.who&&ev.who.length===1)return COLORS[ev.who[0]]||'#bbb';
+  if(ev.who&&ev.who.length===3)return '#9C27B0';
+  return '#78909C';
+}
+function scrollAgendaToDate(ds){
+  const list=document.getElementById('agenda-list');
+  const row=list.querySelector(`.day-row[data-date="${ds}"]`);
+  if(row){
+    list.scrollTop=row.offsetTop-list.offsetTop-8;
+    updateAgendaMonthFromScroll();
+  }
+}
+function goToAgendaDate(ds){
+  const d=parseDate(ds);
+  curYear=d.getFullYear();
+  curMonth=d.getMonth();
+  currentWeekStart=getMonday(d);
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.getElementById('v-agenda').classList.add('active');
+  document.getElementById('tab-agenda').classList.add('active');
+  document.getElementById('person-filter-row').style.display='flex';
+  buildAgenda(false);
+  updateLabel();
+  setTimeout(()=>scrollAgendaToDate(ds),40);
+}
 function buildMonth(){
   const wr=document.getElementById('wday-row');wr.innerHTML='';
   WDAYS.forEach(d=>{const c=document.createElement('div');c.className='wday-cell';c.textContent=d;wr.appendChild(c)});
@@ -763,11 +814,20 @@ function buildMonth(){
   for(let i=0;i<offset;i++){const c=document.createElement('div');c.className='mcell other-month';mc.appendChild(c)}
   for(let d=1;d<=last.getDate();d++){
     const ds=`${curYear}-${String(curMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const evs=events.filter(e=>e.date===ds&&eventMatchesPerson(e));
+    const evs=events.filter(e=>e.date===ds&&eventMatchesPerson(e)).sort((a,b)=>{
+      if(a.allDay&&!b.allDay)return -1;
+      if(!a.allDay&&b.allDay)return 1;
+      return (a.startTime||'').localeCompare(b.startTime||'');
+    });
     const c=document.createElement('div');c.className='mcell'+(isToday(ds)?' today-cell':isPast(ds)?' past-cell':'');
+    const limit=window.innerWidth<520?2:3;
+    const visible=evs.slice(0,limit);
+    const eventHtml=visible.map(ev=>`<div class="mevent ${ev.allDay?'all-day':''}" title="${escapeHTML(ev.title)}" style="border-left-color:${monthEventBorder(ev)}" onclick="event.stopPropagation();openModal('${ev.date}','${ev.id}')">${escapeHTML(monthEventTitle(ev))}</div>`).join('');
+    const more=evs.length>limit?`<div class="mmore">+${evs.length-limit} more</div>`:'';
     const allWho=[...new Set(evs.flatMap(e=>e.who))];
-    c.innerHTML=`<div class="mday">${d}</div><div class="mdots">${allWho.slice(0,4).map(w=>`<span class="mdot" style="background:${COLORS[w]}"></span>`).join('')}</div>`;
-    c.onclick=()=>openModal(ds);mc.appendChild(c);
+    const dots=evs.length?`<div class="mdots">${allWho.slice(0,4).map(w=>`<span class="mdot" style="background:${COLORS[w]}"></span>`).join('')}</div>`:'';
+    c.innerHTML=`<div class="mday">${d}</div><div class="mevents">${eventHtml}${more}</div>${dots}`;
+    c.onclick=()=>goToAgendaDate(ds);mc.appendChild(c);
   }
 }
 
