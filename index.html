@@ -16,7 +16,7 @@
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;background:#f0f4f7;color:#1a1a1a;height:100vh;display:flex;flex-direction:column}
 .app{width:100%;max-width:600px;margin:0 auto;background:white;min-height:100vh;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.1)}
 @media(min-width:760px){.app{max-width:820px}}
-@media(min-width:1100px){.app{max-width:1040px}.day-col{width:92px;min-width:92px}.ev-time-stack{width:70px;min-width:70px}.ev{padding-right:14px}.modal{max-width:620px;min-height:auto;margin-top:24px;border-radius:14px;overflow:hidden}}
+@media(min-width:1100px){.app{max-width:1040px}.day-col{width:92px;min-width:92px}.ev-time-stack{width:68px;min-width:68px}.ev{padding-right:14px}.modal{max-width:620px;min-height:auto;margin-top:24px;border-radius:14px;overflow:hidden}}
 
 /* AUTH SCREEN */
 .auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 24px;background:white}
@@ -54,26 +54,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .person-filter-btn.active.angel-filter{background:var(--angel);border-color:var(--angel)}
 
 /* AGENDA */
-.agenda{overflow-y:auto;flex:1;background:white}
+.agenda{overflow-y:auto;flex:1;background:white;scroll-behavior:smooth}
 .day-row{display:flex;border-bottom:2px solid #8f8f8f;background:white}
 .day-col{width:76px;min-width:76px;background:var(--blue);color:white;padding:8px 6px;text-align:center;cursor:pointer;flex-shrink:0;transition:background 0.1s;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
 .day-col:hover{background:var(--dark)}
 .day-col.past{background:#9ec8dc}
 .day-col.today-col{background:var(--dark);border-left:4px solid var(--orange)}
 .day-dow{font-size:14px;font-weight:800;text-transform:uppercase;opacity:0.95;line-height:1.05;letter-spacing:.02em}
-.day-num{font-size:30px;font-weight:300;line-height:1.05;margin-top:2px}
+.day-num{font-size:28px;font-weight:300;line-height:1.05;margin-top:2px}
 .day-mon{font-size:13px;font-weight:700;opacity:0.9;text-transform:uppercase;line-height:1.05;margin-top:1px}
 .day-extra{font-size:10px;font-weight:700;opacity:.95;margin-top:4px;line-height:1;text-transform:uppercase;color:#fff3d6}
 .day-events{flex:1;background:white;min-width:0}
 .ev{display:flex;align-items:flex-start;gap:6px;padding:8px 8px 9px 6px;border-bottom:1px dotted #d7d7d7;cursor:pointer;min-height:64px;background:white}
 .ev:last-child{border-bottom:none}
 .ev:hover{background:#f8fafb}
-.ev-time-stack{width:58px;min-width:58px;color:#333;font-size:20px;line-height:1.12;text-align:right;padding-top:1px;letter-spacing:-0.04em}
+.ev-time-stack{width:58px;min-width:58px;color:#333;font-size:17px;line-height:1.12;text-align:right;padding-top:1px;letter-spacing:-0.03em}
 .ev-time-start{font-weight:800;color:#333}
 .ev-time-end{font-weight:400;color:#444;margin-top:5px}
-.ev-time-allday{font-weight:800;color:#333;line-height:1.05;text-align:left;font-size:20px}
+.ev-time-allday{font-weight:800;color:#333;line-height:1.05;text-align:left;font-size:17px}
 .ev-main{flex:1;min-width:0;padding-left:0}
-.ev-title{font-size:20px;line-height:1.18;color:#2b2b2b;margin-bottom:8px;font-weight:400;word-break:break-word}
+.ev-title{font-size:18px;line-height:1.18;color:#2b2b2b;margin-bottom:7px;font-weight:400;word-break:break-word}
 .ev-title strong,.ev-title-main{font-weight:800}
 .ev-location{color:#777;font-size:.9em;font-weight:400}
 .ev-note-icon{font-size:.82em;color:#777;margin-left:5px;vertical-align:baseline}
@@ -410,11 +410,14 @@ async function loadEvents(){
   btn.classList.add('spinning');
   document.getElementById('agenda-list').innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
 
-  // Use local midnight to avoid UTC boundary shifting events into wrong month
+  // Agenda is continuous: from the first day of the selected month
+  // through the end of the month 12 months later.
   const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const start=new Date(curYear,curMonth,1-7,0,0,0).toISOString();
-  const end=new Date(curYear,curMonth+1,7,23,59,59).toISOString();
-  const url=`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=250&timeZone=${encodeURIComponent(tz)}`;
+  const rangeStart=new Date(curYear,curMonth,1,0,0,0);
+  const rangeEnd=new Date(curYear,curMonth+13,1,0,0,0); // exclusive
+  const start=rangeStart.toISOString();
+  const end=rangeEnd.toISOString();
+  const url=`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=2500&timeZone=${encodeURIComponent(tz)}`;
   const data=await apiCall(url);
   btn.classList.remove('spinning');
 
@@ -468,35 +471,95 @@ function coziWhoFromPrefix(summary){
   return{who:map[normalized]||[],title:map[normalized]?title:raw,hasCoziPrefix:!!map[normalized]};
 }
 
+function pushCalendarEventInstance(item,target,dateStr,startTime,endTime,allDay,extra={} ){ 
+  const rawTitle=item.summary||'(no title)';
+  const cozi=coziWhoFromPrefix(rawTitle);
+  let who=[];
+  try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
+  if(!who.length&&cozi.who.length)who=cozi.who;
+  if(!who.length)who=['angel'];
+  target.push({
+    id:item.id,
+    date:dateStr,
+    startTime,
+    endTime,
+    allDay,
+    title:cozi.title,
+    rawTitle,
+    loc:item.location||'',
+    notes:cleanDescription(item.description||''),
+    who,
+    gcal:true,
+    multiDay:!!extra.multiDay,
+    sourceStart:extra.sourceStart||dateStr,
+    sourceEnd:extra.sourceEnd||dateStr
+  });
+}
+
 function parseCalendarItems(items,target){
   items.forEach(item=>{
     if(item.status==='cancelled')return;
-    const allDay=!!item.start?.date;
-    let dateStr,startTime=null,endTime=null;
-    if(allDay){
-      dateStr=item.start.date;
-    } else {
-      // Parse as local time to avoid UTC offset shifting events into wrong day/hour
-      const startDt=new Date(item.start.dateTime);
-      const endDt=new Date(item.end.dateTime);
-      dateStr=fmtDate(startDt);
-      startTime=`${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
-      endTime=`${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`;
+    const startRaw=item.start?.date||item.start?.dateTime;
+    const endRaw=item.end?.date||item.end?.dateTime||startRaw;
+    if(!startRaw)return;
+
+    if(item.start?.date){
+      // Google all-day end date is exclusive.
+      const start=parseDate(item.start.date);
+      const end=parseDate(item.end?.date||item.start.date);
+      const last=new Date(end);last.setDate(last.getDate()-1);
+      for(let d=new Date(start);d<=last;d.setDate(d.getDate()+1)){
+        pushCalendarEventInstance(item,target,fmtDate(d),null,null,true,{multiDay:fmtDate(start)!==fmtDate(last),sourceStart:fmtDate(start),sourceEnd:fmtDate(last)});
+      }
+      return;
     }
-    if(!dateStr)return;
-    const rawTitle=item.summary||'(no title)';
-    const cozi=coziWhoFromPrefix(rawTitle);
-    let who=[];
-    try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
-    if(!who.length&&cozi.who.length)who=cozi.who;
-    if(!who.length)who=['angel'];
-    target.push({id:item.id,date:dateStr,startTime,endTime,allDay,title:cozi.title,rawTitle,loc:item.location||'',notes:item.description||'',who,gcal:true});
+
+    const startDt=new Date(item.start.dateTime);
+    const endDt=new Date(item.end.dateTime);
+    const startStr=fmtDate(startDt);
+    const endStr=fmtDate(endDt);
+    const startsAtMidnight=startDt.getHours()===0&&startDt.getMinutes()===0&&startDt.getSeconds()===0;
+    const endsAtMidnight=endDt.getHours()===0&&endDt.getMinutes()===0&&endDt.getSeconds()===0;
+    const duration=endDt-startDt;
+
+    // Some events created through connectors arrive as dateTime midnight-to-midnight
+    // instead of true all-day date/date values. Treat them as visual all-day spans.
+    if(duration>=24*60*60*1000&&startsAtMidnight&&endsAtMidnight){
+      const last=new Date(endDt);last.setDate(last.getDate()-1);
+      for(let d=new Date(startDt);d<=last;d.setDate(d.getDate()+1)){
+        pushCalendarEventInstance(item,target,fmtDate(d),null,null,true,{multiDay:true,sourceStart:startStr,sourceEnd:fmtDate(last)});
+      }
+      return;
+    }
+
+    if(startStr!==endStr){
+      // Timed event crossing midnight: show it on each covered day.
+      for(let d=new Date(startDt);d<=endDt;d.setDate(d.getDate()+1)){
+        const ds=fmtDate(d);
+        if(ds>endStr)break;
+        const isFirst=ds===startStr;
+        const isLast=ds===endStr;
+        const st=isFirst?`${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`:'00:00';
+        const et=isLast?`${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`:'23:59';
+        pushCalendarEventInstance(item,target,ds,st,et,false,{multiDay:true,sourceStart:startStr,sourceEnd:endStr});
+      }
+      return;
+    }
+
+    pushCalendarEventInstance(
+      item,
+      target,
+      startStr,
+      `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`,
+      `${String(endDt.getHours()).padStart(2,'0')}:${String(endDt.getMinutes()).padStart(2,'0')}`,
+      false
+    );
   });
 }
 
 async function updateGCalEvent(ev){
   const body={summary:ev.title,location:ev.loc||undefined,description:ev.notes||undefined};
-  if(ev.allDay){body.start={date:ev.date};body.end={date:ev.date};}
+  if(ev.allDay){body.start={date:ev.date};const end=parseDate(ev.repeatEnd&&false?ev.repeatEnd:(ev.endDate||ev.date));end.setDate(end.getDate()+1);body.end={date:fmtDate(end)};}
   else{
     body.start={dateTime:`${ev.date}T${ev.startTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
@@ -509,7 +572,7 @@ async function updateGCalEvent(ev){
 
 async function createGCalEvent(ev){
   const body={summary:ev.title,location:ev.loc||undefined,description:ev.notes||undefined};
-  if(ev.allDay){body.start={date:ev.date};body.end={date:ev.date};}
+  if(ev.allDay){body.start={date:ev.date};const end=parseDate(ev.repeatEnd&&false?ev.repeatEnd:(ev.endDate||ev.date));end.setDate(end.getDate()+1);body.end={date:fmtDate(end)};}
   else{
     body.start={dateTime:`${ev.date}T${ev.startTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
@@ -535,10 +598,27 @@ function parseDate(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-
 function getActiveView(){const active=document.querySelector('.view.active');return active?active.id.replace('v-',''):'agenda'}
 function getMonday(d){const x=new Date(d);x.setHours(0,0,0,0);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x}
 function weekLabel(start){const end=new Date(start);end.setDate(end.getDate()+6);const a=start.toLocaleDateString('en-US',{month:'short',day:'numeric'});const b=end.toLocaleDateString('en-US',{month:'short',day:'numeric'});const y=end.getFullYear();return `Week ${a} – ${b} ${y}`}
-function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=parseInt(h);return`${hr>12?hr-12:hr||12}:${m}${hr>=12?'p':'a'}`}
+function fmtTime(t){return t||''}
 function agendaTimeHTML(ev){return ev.allDay?'<div class="ev-time-stack"><div class="ev-time-allday">All<br>Day</div></div>':`<div class="ev-time-stack"><div class="ev-time-start">${fmtTime(ev.startTime)}</div><div class="ev-time-end">${fmtTime(ev.endTime)}</div></div>`}
 function escapeHTML(v){return String(v||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function hasNotes(ev){return !!(ev.notes&&ev.notes.replace(/<[^>]*>/g,'').trim())}
+function cleanDescription(html){
+  const text=String(html||'')
+    .replace(/<\/?p[^>]*>/gi,'\n')
+    .replace(/<br\s*\/?\s*>/gi,'\n')
+    .replace(/<[^>]*>/g,'')
+    .replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&')
+    .replace(/&lt;/g,'<')
+    .replace(/&gt;/g,'>')
+    .replace(/&#40;/g,'(')
+    .replace(/&#41;/g,')')
+    .replace(/&quot;/g,'"')
+    .replace(/&#39;/g,"'")
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
+  return text;
+}
+function hasNotes(ev){return !!(ev.notes&&cleanDescription(ev.notes).trim())}
 function agendaTitleHTML(ev){
   const title=escapeHTML(ev.title);
   const loc=ev.loc?` <span class="ev-location">(${escapeHTML(ev.loc)})</span>`:'';
@@ -579,15 +659,44 @@ function agendaDateLabel(d,ds){
 }
 
 // ── AGENDA ────────────────────────────────────────────────
+function agendaRangeStart(){return new Date(curYear,curMonth,1)}
+function agendaRangeEnd(){return new Date(curYear,curMonth+13,0)}
+let agendaScrollHandlerAttached=false;
+
+function updateAgendaMonthFromScroll(){
+  if(getActiveView()!=='agenda')return;
+  const list=document.getElementById('agenda-list');
+  const rows=[...list.querySelectorAll('.day-row[data-date]')];
+  if(!rows.length)return;
+  const listTop=list.getBoundingClientRect().top;
+  let active=rows[0];
+  for(const row of rows){
+    const rect=row.getBoundingClientRect();
+    if(rect.top-listTop<=50)active=row;
+    else break;
+  }
+  const ds=active.dataset.date;
+  const d=parseDate(ds);
+  document.getElementById('month-label').textContent=`${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function attachAgendaScrollHandler(){
+  if(agendaScrollHandlerAttached)return;
+  const list=document.getElementById('agenda-list');
+  list.addEventListener('scroll',()=>requestAnimationFrame(updateAgendaMonthFromScroll));
+  agendaScrollHandlerAttached=true;
+}
+
 function buildAgenda(scrollToToday){
   const list=document.getElementById('agenda-list');list.innerHTML='';
-  const start=new Date(curYear,curMonth,1);
-  const end=new Date(curYear,curMonth+1,0);
+  attachAgendaScrollHandler();
+  const start=agendaRangeStart();
+  const end=agendaRangeEnd();
   for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
     const ds=fmtDate(d);
     const evs=events.filter(e=>e.date===ds&&eventMatchesPerson(e)).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
     const past=isPast(ds),tod=isToday(ds);
-    const row=document.createElement('div');row.className='day-row';
+    const row=document.createElement('div');row.className='day-row';row.dataset.date=ds;
     if(tod)row.id='today-row';
 
     const dc=document.createElement('div');dc.className='day-col'+(tod?' today-col':past?' past':'');
@@ -607,8 +716,9 @@ function buildAgenda(scrollToToday){
   }
   if(scrollToToday){
     const todEl=document.getElementById('today-row');
-    if(todEl)setTimeout(()=>{const ag=document.getElementById('agenda-list');ag.scrollTop=todEl.offsetTop-ag.offsetTop-8;},40);
-  }
+    if(todEl)setTimeout(()=>{const ag=document.getElementById('agenda-list');ag.scrollTop=todEl.offsetTop-ag.offsetTop-8;updateAgendaMonthFromScroll();},40);
+    else setTimeout(updateAgendaMonthFromScroll,40);
+  } else setTimeout(updateAgendaMonthFromScroll,40);
 }
 
 
@@ -661,7 +771,7 @@ function buildMonth(){
   }
 }
 
-function updateLabel(){document.getElementById('month-label').textContent=getActiveView()==='week'?weekLabel(currentWeekStart):`${MONTHS[curMonth]} ${curYear}`}
+function updateLabel(){const v=getActiveView();document.getElementById('month-label').textContent=v==='week'?weekLabel(currentWeekStart):`${MONTHS[curMonth]} ${curYear}`;if(v==='agenda')setTimeout(updateAgendaMonthFromScroll,0)}
 function navPrev(){
   if(getActiveView()==='week'){
     currentWeekStart.setDate(currentWeekStart.getDate()-7);
@@ -770,6 +880,7 @@ async function saveEvent(){
   const ev={
     id:editingEventId||null,
     date:document.getElementById('ev-start-date').value,
+    endDate:document.getElementById('ev-end-date').value,
     startTime:allDay?null:document.getElementById('ev-start-time').value,
     endTime:allDay?null:document.getElementById('ev-end-time').value,
     allDay,title,
