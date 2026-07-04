@@ -205,6 +205,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .char-count{font-size:10px;color:#bbb;text-align:right;margin-top:4px}
 .field-error{border-bottom-color:#F44336!important}
 
+.recurring-bar{display:none;padding:10px 16px;background:#f7fbff;border-bottom:1px solid #dcecf8;color:#2b4a5a;font-size:12px}
+.recurring-bar.open{display:block}
+.recurring-bar-title{font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.recurring-scope-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.recurring-scope-btn{border:1px solid #b9d9ed;background:white;color:var(--blue);border-radius:14px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.recurring-scope-btn.active{background:var(--blue);color:white;border-color:var(--blue)}
+.recurring-loading{font-size:11px;color:#78909c;margin-top:6px;display:none}
+.recurring-loading.open{display:block}
+
+
 /* POST-IT */
 .postit-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;align-items:center;justify-content:center;padding:16px}
 .postit-bg.open{display:flex}
@@ -291,6 +301,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
     </div>
     <div id="delete-bar" style="display:none;padding:8px 16px;background:#fff5f5;border-bottom:1px solid #ffe0e0;text-align:right">
       <button onclick="deleteEvent()" style="background:none;border:none;color:#e53935;font-size:13px;cursor:pointer;font-weight:600">🗑 Delete event</button>
+    </div>
+    <div id="recurring-bar" class="recurring-bar">
+      <div class="recurring-bar-title">🔁 This is part of a repeating event</div>
+      <div class="recurring-scope-buttons">
+        <button type="button" id="scope-series-btn" class="recurring-scope-btn" onclick="setRecurringEditScope('series')">Whole series</button>
+        <button type="button" id="scope-single-btn" class="recurring-scope-btn" onclick="setRecurringEditScope('single')">Only this event</button>
+      </div>
+      <div id="recurring-loading" class="recurring-loading">Loading series details…</div>
     </div>
     <div class="modal-section"><input type="text" class="fi" id="ev-title" placeholder="Event title" style="font-size:16px;padding:5px 0"/></div>
     <div class="modal-section"><div class="modal-row"><span class="icon">📍</span><input type="text" class="fi" id="ev-loc" placeholder="Location"/></div></div>
@@ -512,7 +530,10 @@ function pushCalendarEventInstance(item,target,dateStr,startTime,endTime,allDay,
     gcal:true,
     multiDay:!!extra.multiDay,
     sourceStart:extra.sourceStart||dateStr,
-    sourceEnd:extra.sourceEnd||dateStr
+    sourceEnd:extra.sourceEnd||dateStr,
+    recurringEventId:item.recurringEventId||null,
+    originalStartTime:item.originalStartTime||null,
+    recurrence:item.recurrence||null
   });
 }
 
@@ -579,14 +600,29 @@ function parseCalendarItems(items,target){
 
 async function updateGCalEvent(ev){
   const body={summary:ev.title,location:ev.loc||undefined,description:ev.notes||undefined};
-  if(ev.allDay){body.start={date:ev.date};const end=parseDate(ev.repeatEnd&&false?ev.repeatEnd:(ev.endDate||ev.date));end.setDate(end.getDate()+1);body.end={date:fmtDate(end)};}
+  if(ev.allDay){
+    body.start={date:ev.date};
+    const end=parseDate(ev.endDate||ev.date);end.setDate(end.getDate()+1);
+    body.end={date:fmtDate(end)};
+  }
   else{
     body.start={dateTime:`${ev.date}T${ev.startTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
     body.end={dateTime:`${ev.date}T${ev.endTime}:00`,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
   }
   body.extendedProperties={private:{familyWho:JSON.stringify(ev.who)}};
+
+  // For an existing series, keep the original recurrence lines (including EXDATEs)
+  // unless the repeat controls were actually changed in the modal.
   const rrule=buildRecurrenceRule(ev);
-  if(rrule)body.recurrence=[rrule];
+  if(ev.editingScope==='series'){
+    const recurrenceUnchanged=ev.originalRecurrence&&ev.repeat===ev.originalRepeat&&ev.repeatEnd===ev.originalRepeatEnd;
+    if(recurrenceUnchanged)body.recurrence=ev.originalRecurrence;
+    else if(rrule)body.recurrence=[rrule];
+    else body.recurrence=[];
+  } else if(rrule){
+    body.recurrence=[rrule];
+  }
+
   return apiCall(`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events/${ev.id}`,'PUT',body);
 }
 
@@ -869,14 +905,83 @@ function showView(v,btn){
 
 // ── EVENT MODAL ───────────────────────────────────────────
 let editingEventId=null;
+let editingInstanceId=null;
+let editingSeriesId=null;
+let editingScope='single';
+let editingOriginalRecurrence=null;
+let editingOriginalRepeat='none';
+let editingOriginalRepeatEnd='';
+let editingLoadedSeriesEvent=null;
+let editingLoadedInstanceEvent=null;
 
-function openModal(ds,eventId=null){
-  editingEventId=eventId;
-  const isEdit=!!eventId;
-  const ev=isEdit?(events.find(e=>e.id===eventId)||allEvents.find(e=>e.id===eventId)):null;
-  const d=ev?ev.date:(ds||fmtDate(new Date()));
+function findEventById(eventId){return events.find(e=>e.id===eventId)||allEvents.find(e=>e.id===eventId)||null;}
 
-  // Default time: next full hour
+function parseRepeatFromRecurrence(recurrence){
+  const lines=Array.isArray(recurrence)?recurrence:[];
+  const rrule=lines.find(x=>String(x).startsWith('RRULE'))||'';
+  if(!rrule)return{repeat:'none',repeatEnd:''};
+  const freq=(rrule.match(/FREQ=([^;]+)/)||[])[1]||'';
+  const interval=(rrule.match(/INTERVAL=([^;]+)/)||[])[1]||'';
+  let repeat='none';
+  if(freq==='DAILY')repeat='DAILY';
+  if(freq==='WEEKLY')repeat=interval==='2'?'BIWEEKLY':'WEEKLY';
+  if(freq==='MONTHLY')repeat='MONTHLY';
+  if(freq==='YEARLY')repeat='YEARLY';
+  const until=(rrule.match(/UNTIL=(\d{8})/)||[])[1]||'';
+  const repeatEnd=until?`${until.slice(0,4)}-${until.slice(4,6)}-${until.slice(6,8)}`:'';
+  return{repeat,repeatEnd};
+}
+
+function baseEventFromGCalItem(item){
+  const rawTitle=item.summary||'(no title)';
+  const cozi=coziWhoFromPrefix(rawTitle);
+  let who=[];
+  try{const ep=item.extendedProperties?.private;if(ep?.familyWho)who=JSON.parse(ep.familyWho);}catch(e){}
+  if(!who.length&&cozi.who.length)who=cozi.who;
+  if(!who.length)who=['angel'];
+
+  const startRaw=item.start?.date||item.start?.dateTime;
+  const endRaw=item.end?.date||item.end?.dateTime||startRaw;
+  let date=fmtDate(new Date());
+  let endDate=date;
+  let startTime=null;
+  let endTime=null;
+  let allDay=!!item.start?.date;
+
+  if(item.start?.date){
+    date=item.start.date;
+    const end=parseDate(item.end?.date||item.start.date);end.setDate(end.getDate()-1);
+    endDate=fmtDate(end);
+  } else if(startRaw){
+    const s=new Date(startRaw);const e=new Date(endRaw);
+    date=fmtDate(s);endDate=fmtDate(e);
+    startTime=`${String(s.getHours()).padStart(2,'0')}:${String(s.getMinutes()).padStart(2,'0')}`;
+    endTime=`${String(e.getHours()).padStart(2,'0')}:${String(e.getMinutes()).padStart(2,'0')}`;
+  }
+
+  const rec=parseRepeatFromRecurrence(item.recurrence||[]);
+  return{
+    id:item.id,date,endDate,startTime,endTime,allDay,
+    title:cozi.title,rawTitle,loc:item.location||'',notes:cleanDescription(item.description||''),who,gcal:true,
+    repeat:rec.repeat,repeatEnd:rec.repeatEnd,recurrence:item.recurrence||null
+  };
+}
+
+async function fetchGCalEventById(id){
+  if(!id||!accessToken)return null;
+  const encoded=encodeURIComponent(id);
+  return apiCall(`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events/${encoded}`);
+}
+
+function setRecurringScopeButtons(scope){
+  const seriesBtn=document.getElementById('scope-series-btn');
+  const singleBtn=document.getElementById('scope-single-btn');
+  if(seriesBtn)seriesBtn.classList.toggle('active',scope==='series');
+  if(singleBtn)singleBtn.classList.toggle('active',scope==='single');
+}
+
+function populateEventModal(ev,isEdit){
+  const d=ev?ev.date:(fmtDate(new Date()));
   const now=new Date();
   const nextHour=`${String(now.getHours()+1>23?23:now.getHours()+1).padStart(2,'0')}:00`;
   const nextHourEnd=`${String(now.getHours()+2>23?23:now.getHours()+2).padStart(2,'0')}:00`;
@@ -888,7 +993,7 @@ function openModal(ds,eventId=null){
   document.getElementById('ev-notes').value=ev?ev.notes:'';
   document.getElementById('cc').textContent=(ev?ev.notes.length:0)+' / 8000';
   document.getElementById('ev-start-date').value=d;
-  document.getElementById('ev-end-date').value=d;
+  document.getElementById('ev-end-date').value=ev?(ev.endDate||d):d;
   document.getElementById('ev-start-time').value=ev&&ev.startTime?ev.startTime:nextHour;
   document.getElementById('ev-end-time').value=ev&&ev.endTime?ev.endTime:nextHourEnd;
 
@@ -897,14 +1002,76 @@ function openModal(ds,eventId=null){
   allDay?tog.classList.add('on'):tog.classList.remove('on');
   document.getElementById('time-fields').style.opacity=allDay?'0.3':'1';
 
-  document.getElementById('ev-repeat').value='none';
-  document.getElementById('ev-repeat-end').value='';
+  document.getElementById('ev-repeat').value=ev&&ev.repeat?ev.repeat:'none';
+  document.getElementById('ev-repeat-end').value=ev&&ev.repeatEnd?ev.repeatEnd:'';
   toggleRepeatEnd();
 
   const who=ev?ev.who:['angel','raluca','victor'];
   ['angel','raluca','victor'].forEach(p=>document.getElementById('who-'+p).checked=who.includes(p));
   document.getElementById('ev-title').classList.remove('field-error');
+}
+
+async function setRecurringEditScope(scope){
+  if(!editingSeriesId)return;
+  editingScope=scope;
+  setRecurringScopeButtons(scope);
+  const loading=document.getElementById('recurring-loading');
+
+  if(scope==='single'){
+    editingEventId=editingInstanceId;
+    if(editingLoadedInstanceEvent)populateEventModal(editingLoadedInstanceEvent,true);
+    return;
+  }
+
+  editingEventId=editingSeriesId;
+  if(editingLoadedSeriesEvent){populateEventModal(editingLoadedSeriesEvent,true);return;}
+  if(loading)loading.classList.add('open');
+  const item=await fetchGCalEventById(editingSeriesId);
+  if(loading)loading.classList.remove('open');
+  if(!item){
+    alert('Could not load the recurring series. You can still edit this single occurrence.');
+    editingScope='single';editingEventId=editingInstanceId;setRecurringScopeButtons('single');
+    return;
+  }
+  editingLoadedSeriesEvent=baseEventFromGCalItem(item);
+  editingOriginalRecurrence=editingLoadedSeriesEvent.recurrence||null;
+  editingOriginalRepeat=editingLoadedSeriesEvent.repeat||'none';
+  editingOriginalRepeatEnd=editingLoadedSeriesEvent.repeatEnd||'';
+  populateEventModal(editingLoadedSeriesEvent,true);
+}
+
+async function openModal(ds,eventId=null){
+  editingEventId=eventId;
+  editingInstanceId=eventId;
+  editingSeriesId=null;
+  editingScope='single';
+  editingOriginalRecurrence=null;
+  editingOriginalRepeat='none';
+  editingOriginalRepeatEnd='';
+  editingLoadedSeriesEvent=null;
+  editingLoadedInstanceEvent=null;
+
+  const isEdit=!!eventId;
+  const ev=isEdit?findEventById(eventId):null;
+  if(ev)editingLoadedInstanceEvent={...ev,repeat:'none',repeatEnd:''};
+
+  const bar=document.getElementById('recurring-bar');
+  const loading=document.getElementById('recurring-loading');
+  if(bar)bar.classList.remove('open');
+  if(loading)loading.classList.remove('open');
+  setRecurringScopeButtons('single');
+
+  populateEventModal(ev||{date:ds||fmtDate(new Date()),endDate:ds||fmtDate(new Date()),who:['angel','raluca','victor'],title:'',loc:'',notes:'',allDay:false,repeat:'none',repeatEnd:''},isEdit);
   document.getElementById('modal').classList.add('open');
+
+  // If the clicked event is an occurrence of a repeating event, default to editing the whole series.
+  // The user can switch to "Only this event" before saving or deleting.
+  if(ev&&ev.recurringEventId){
+    editingSeriesId=ev.recurringEventId;
+    if(bar)bar.classList.add('open');
+    await setRecurringEditScope('series');
+  }
+
   setTimeout(()=>document.getElementById('ev-title').focus(),100);
 }
 
@@ -928,16 +1095,11 @@ function toggleRepeatEnd(){
   else{sec.classList.remove('open');document.getElementById('ev-repeat-end').value='';}
 }
 
-async function saveEvent(){
+function collectModalEvent(){
   const title=document.getElementById('ev-title').value.trim();
-  if(!title){document.getElementById('ev-title').classList.add('field-error');return;}
   const who=['angel','raluca','victor'].filter(p=>document.getElementById('who-'+p).checked);
-  if(!who.length){alert('Please select at least one person.');return;}
   const allDay=document.getElementById('allday-toggle').classList.contains('on');
-  const btn=document.getElementById('save-btn');
-  btn.textContent='...';btn.disabled=true;
-
-  const ev={
+  return{
     id:editingEventId||null,
     date:document.getElementById('ev-start-date').value,
     endDate:document.getElementById('ev-end-date').value,
@@ -949,35 +1111,56 @@ async function saveEvent(){
     repeat:document.getElementById('ev-repeat').value,
     repeatEnd:document.getElementById('ev-repeat-end').value,
     reminder:document.getElementById('ev-reminder').value,
-    who
+    who,
+    editingScope,
+    originalRecurrence:editingOriginalRecurrence,
+    originalRepeat:editingOriginalRepeat,
+    originalRepeatEnd:editingOriginalRepeatEnd
   };
+}
 
-  if(accessToken){
-    if(editingEventId){
-      await updateGCalEvent(ev);
-      events=events.map(e=>e.id===editingEventId?{...ev,gcal:true}:e);
-      allEvents=allEvents.map(e=>e.id===editingEventId?{...ev,gcal:true}:e);
+async function saveEvent(){
+  const title=document.getElementById('ev-title').value.trim();
+  if(!title){document.getElementById('ev-title').classList.add('field-error');return;}
+  const who=['angel','raluca','victor'].filter(p=>document.getElementById('who-'+p).checked);
+  if(!who.length){alert('Please select at least one person.');return;}
+
+  const btn=document.getElementById('save-btn');
+  btn.textContent='...';btn.disabled=true;
+  const ev=collectModalEvent();
+
+  try{
+    if(accessToken){
+      if(editingEventId){
+        await updateGCalEvent(ev);
+      } else {
+        const created=await createGCalEvent(ev);
+        if(created){ev.id=created.id;ev.gcal=true;}
+      }
+      closeModal();
+      await loadEvents();
     } else {
-      const created=await createGCalEvent(ev);
-      if(created){ev.id=created.id;ev.gcal=true;}
-      events.push(ev);
-      allEvents.push(ev);
+      if(editingEventId){
+        events=events.map(e=>e.id===editingEventId?ev:e);
+        allEvents=allEvents.map(e=>e.id===editingEventId?ev:e);
+      } else{ev.id='local-'+Date.now();events.push(ev);allEvents.push(ev);}
+      closeModal();buildAgenda(false);buildWeek();buildMonth();
     }
-  } else {
-    if(editingEventId){
-      events=events.map(e=>e.id===editingEventId?ev:e);
-      allEvents=allEvents.map(e=>e.id===editingEventId?ev:e);
-    } else{ev.id='local-'+Date.now();events.push(ev);allEvents.push(ev);}
+  } finally {
+    btn.textContent='SAVE';btn.disabled=false;
   }
-
-  closeModal();buildAgenda(false);buildWeek();buildMonth();
-  btn.textContent='SAVE';btn.disabled=false;
 }
 
 async function deleteEvent(){
   if(!editingEventId)return;
-  if(!confirm('Delete this event?'))return;
-  if(accessToken){await apiCall(`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events/${editingEventId}`,'DELETE');}
+  const msg=editingScope==='series'?'Delete the whole repeating series?':'Delete only this event?';
+  if(!confirm(msg))return;
+  if(accessToken){
+    await apiCall(`https://www.googleapis.com/calendar/v3/calendars/aancin%40gmail.com/events/${encodeURIComponent(editingEventId)}`,'DELETE');
+    closeModal();
+    await loadEvents();
+    return;
+  }
   events=events.filter(e=>e.id!==editingEventId);
   allEvents=allEvents.filter(e=>e.id!==editingEventId);
   closeModal();buildAgenda(false);buildWeek();buildMonth();
